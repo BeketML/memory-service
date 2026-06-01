@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: memory
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: memory
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # ── Optional: only start if you don't already have a Qdrant instance ──────────
+  # To use your own Qdrant, set QDRANT_URL in .env and run:
+  #   docker compose up -d postgres app    (skip the qdrant service)
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    ports:
+      - "6334:6333"   # expose on 6334 to avoid colliding with a local Qdrant on 6333
+    volumes:
+      - qdata:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz | grep -q ok || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://memory:memory@postgres:5432/memory
+      # Override QDRANT_URL in .env to point to your own Qdrant instance.
+      # Default points to the qdrant service above.
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  qdata:

@@ -1,0 +1,141 @@
+{
+  "description": "Synthetic recall quality fixture — 4 scenarios, 12 probes",
+  "scenarios": [
+    {
+      "name": "employment_supersession",
+      "description": "User changes employer from Stripe to Notion — fact must update",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user", "content": "Hey, I'm a backend engineer at Stripe. Just started last month."},
+            {"role": "assistant", "content": "Welcome! Stripe is a great place to work. What are you working on?"}
+          ]
+        },
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:05:00Z",
+          "messages": [
+            {"role": "user", "content": "I've got a golden retriever named Biscuit and I live in NYC."},
+            {"role": "assistant", "content": "Biscuit sounds adorable! NYC is vibrant."}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T09:00:00Z",
+          "messages": [
+            {"role": "user", "content": "Big news — I just started at Notion as a PM and moved to Berlin!"},
+            {"role": "assistant", "content": "Wow, both a new job and a new city! Congratulations!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "Where does this user work now?",
+          "expected_facts": ["notion", "pm"]
+        },
+        {
+          "query": "Where does this user live?",
+          "expected_facts": ["berlin"]
+        },
+        {
+          "query": "What is the user's pet's name?",
+          "expected_facts": ["biscuit"]
+        },
+        {
+          "query": "What city does the user with the dog named Biscuit live in?",
+          "expected_facts": ["berlin"]
+        }
+      ]
+    },
+    {
+      "name": "opinion_arc",
+      "description": "User's opinion on TypeScript evolves from positive to mixed",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user", "content": "I absolutely love TypeScript. It's made my code so much safer."},
+            {"role": "assistant", "content": "TypeScript has definitely improved large codebases."}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T10:00:00Z",
+          "messages": [
+            {"role": "user", "content": "TypeScript generics are getting really annoying lately. Too much boilerplate."},
+            {"role": "assistant", "content": "Yes, complex generics can be challenging."}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "How does this user feel about TypeScript?",
+          "expected_facts": ["typescript"]
+        },
+        {
+          "query": "What programming languages does the user have opinions about?",
+          "expected_facts": ["typescript"]
+        }
+      ]
+    },
+    {
+      "name": "implicit_facts",
+      "description": "Implicit facts — walking Biscuit implies having a pet",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-10T08:00:00Z",
+          "messages": [
+            {"role": "user", "content": "Just got back from walking Biscuit, my golden retriever. She loves the park."},
+            {"role": "assistant", "content": "That sounds wonderful! Dogs love morning walks."}
+          ]
+        },
+        {
+          "session": "s1",
+          "timestamp": "2025-03-10T09:00:00Z",
+          "messages": [
+            {"role": "user", "content": "I'm vegetarian by the way, so no meat restaurants please."},
+            {"role": "assistant", "content": "Noted! I'll suggest vegetarian-friendly options."}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "What is the user's dog's name?",
+          "expected_facts": ["biscuit"]
+        },
+        {
+          "query": "What dietary restrictions does this user have?",
+          "expected_facts": ["vegetarian"]
+        }
+      ]
+    },
+    {
+      "name": "noise_resistance",
+      "description": "Queries about topics never discussed should return empty",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user", "content": "I work as a data scientist and I love Python."},
+            {"role": "assistant", "content": "Python is great for data science!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "What is the user's favorite hiking trail?",
+          "expected_facts": []
+        },
+        {
+          "query": "Does the user have any siblings?",
+          "expected_facts": []
+        }
+      ]
+    }
+  ]
+}
