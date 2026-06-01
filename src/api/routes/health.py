@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from src.storage.postgres.pool import check_healthy as pg_healthy
+from src.storage.postgres.database import check_healthy as pg_healthy
 from src.storage.qdrant.collection import check_healthy as qdrant_healthy
 
 router = APIRouter()

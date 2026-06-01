@@ -1,14 +1,25 @@
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime
-from typing import Optional
-import asyncpg
+from typing import Any, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.storage.postgres.models import Turn
+
+
+def _turn_row(row: Turn) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "raw_text": row.raw_text,
+        "turn_ts": row.turn_ts,
+    }
 
 
 async def insert_turn(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     session_id: str,
     user_id: Optional[str],
     messages: list,
@@ -16,37 +27,30 @@ async def insert_turn(
     turn_ts: datetime,
     metadata: dict,
 ) -> str:
-    turn_id = str(uuid.uuid4())
-    await conn.execute(
-        """
-        INSERT INTO turns (id, session_id, user_id, messages, raw_text, turn_ts, metadata)
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7::jsonb)
-        """,
-        turn_id,
-        session_id,
-        user_id,
-        json.dumps(messages),
-        raw_text,
-        turn_ts,
-        json.dumps(metadata),
+    turn_id = uuid.uuid4()
+    turn = Turn(
+        id=turn_id,
+        session_id=session_id,
+        user_id=user_id,
+        messages=messages,
+        raw_text=raw_text,
+        turn_ts=turn_ts,
+        metadata_=metadata,
     )
-    return turn_id
+    session.add(turn)
+    await session.flush()
+    return str(turn_id)
 
 
 async def get_recent_turns(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     session_id: str,
     limit: int = 5,
 ) -> list[dict]:
-    rows = await conn.fetch(
-        """
-        SELECT id, raw_text, turn_ts
-        FROM turns
-        WHERE session_id = $1
-        ORDER BY turn_ts DESC
-        LIMIT $2
-        """,
-        session_id,
-        limit,
+    result = await session.execute(
+        select(Turn)
+        .where(Turn.session_id == session_id)
+        .order_by(Turn.turn_ts.desc())
+        .limit(limit)
     )
-    return [dict(r) for r in rows]
+    return [_turn_row(row) for row in result.scalars().all()]

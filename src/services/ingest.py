@@ -11,7 +11,7 @@ from src.extraction.parser import Candidate, make_fallback_candidate, parse_cand
 from src.extraction.prompts import EXTRACTION_SYSTEM, EXTRACTION_USER_TEMPLATE
 from src.retrieval.embedder import embed
 from src.retrieval.qdrant import patch_payload, upsert_memory
-from src.storage.postgres.pool import get_pool
+from src.storage.postgres.database import get_session
 from src.storage.postgres.repos import memories as mem_repo
 from src.storage.postgres.repos import sessions as sess_repo
 from src.storage.postgres.repos import turns as turn_repo
@@ -52,19 +52,17 @@ async def ingest_turn(
     turn_ts: datetime,
     metadata: dict,
 ) -> str:
-    pool = await get_pool()
-
-    async with pool.acquire() as conn:
+    async with get_session() as session:
         if user_id:
-            await user_repo.upsert_user(conn, user_id, {})
-        await sess_repo.upsert_session(conn, session_id, user_id, metadata)
+            await user_repo.upsert_user(session, user_id, {})
+        await sess_repo.upsert_session(session, session_id, user_id, metadata)
 
         raw_text = _flatten_messages(messages)
         if len(raw_text) > _MAX_RAW_TEXT:
             raw_text = raw_text[:_MAX_RAW_TEXT] + "\n[truncated]"
 
         turn_id = await turn_repo.insert_turn(
-            conn,
+            session,
             session_id=session_id,
             user_id=user_id,
             messages=messages,
@@ -75,7 +73,7 @@ async def ingest_turn(
 
         known_memories: list[dict] = []
         if user_id:
-            known_memories = await mem_repo.get_active_memories(conn, user_id)
+            known_memories = await mem_repo.get_active_memories(session, user_id)
 
     # LLM extraction (outside DB connection — can take up to ~30s)
     candidates: list[Candidate] = []
@@ -95,11 +93,11 @@ async def ingest_turn(
         return turn_id
 
     # Reconcile + embed + upsert Qdrant per candidate
-    async with pool.acquire() as conn:
+    async with get_session() as session:
         for candidate in candidates:
             try:
                 new_mem_id, superseded_id = await reconcile_candidate(
-                    conn,
+                    session,
                     candidate,
                     user_id=user_id,
                     session_id=session_id,

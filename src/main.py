@@ -11,7 +11,7 @@ from src.api.middleware.auth import BearerAuthMiddleware
 from src.api.routes import admin, health, memories, recall, search, sessions, turns, users
 from src.config import settings
 from src.retrieval.embedder import load_models
-from src.storage.postgres.pool import close_pool, init_pool
+from src.storage.postgres.database import close_db, init_db
 from src.storage.qdrant.collection import close_qdrant, init_qdrant
 
 logging.basicConfig(
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up Memory Service...")
-    await init_pool(settings.database_url)
-    logger.info("PostgreSQL pool ready")
+    await init_db(settings.database_url)
+    logger.info("PostgreSQL ready")
     await init_qdrant()
     logger.info("Qdrant ready")
     await load_models()
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down...")
     await close_qdrant()
-    await close_pool()
+    await close_db()
 
 
 app = FastAPI(

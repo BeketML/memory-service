@@ -26,8 +26,16 @@ class Settings(BaseSettings):
     # Optional bearer auth
     memory_auth_token: Optional[str] = None
 
-    # Embedding
-    embedding_model: str = "BAAI/bge-m3"
+    # Dense embeddings — OpenAI API (reuses openai_api_key)
+    openai_embedding_model: str = "text-embedding-3-small"
+    dense_dim: int = 1536
+
+    # Sparse embeddings — local BM25 via fastembed (tiny, tokenizer-only)
+    sparse_model: str = "Qdrant/bm25"
+
+    # ColBERT reranker — local via fastembed (~110MB)
+    colbert_model: str = "colbert-ir/colbertv2.0"
+    colbert_dim: int = 128
 
     # Retrieval knobs
     max_candidates: int = 50           # per-leg (dense / sparse) before RRF

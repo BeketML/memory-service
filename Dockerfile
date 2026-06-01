@@ -16,18 +16,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download BGE-M3 models so first startup is fast
+# Pre-download the two LOCAL embedding models (BM25 + ColBERT) so first
+# startup is fast.  Dense embeddings are served by the OpenAI API and need
+# no local download.
 RUN python -c "\
 import os; \
 os.makedirs('/app/.cache/fastembed', exist_ok=True); \
-from fastembed import TextEmbedding, SparseTextEmbedding, LateInteractionTextEmbedding; \
-print('Downloading BGE-M3 dense...'); \
-list(TextEmbedding('BAAI/bge-m3').embed(['warmup'])); \
-print('Downloading BGE-M3 sparse...'); \
-list(SparseTextEmbedding('BAAI/bge-m3').embed(['warmup'])); \
-print('Downloading BGE-M3 colbert...'); \
-list(LateInteractionTextEmbedding('BAAI/bge-m3').embed(['warmup'])); \
-print('All BGE-M3 models ready.'); \
+from fastembed import SparseTextEmbedding, LateInteractionTextEmbedding; \
+print('Downloading BM25 sparse model...'); \
+list(SparseTextEmbedding('Qdrant/bm25').embed(['warmup'])); \
+print('Downloading colbert-ir/colbertv2.0...'); \
+list(LateInteractionTextEmbedding('colbert-ir/colbertv2.0').embed(['warmup'])); \
+print('Local embedding models ready.'); \
 "
 
 # Copy application source

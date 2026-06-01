@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
-import asyncpg
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.extraction.parser import Candidate
 from src.storage.postgres.repos import memories as mem_repo
@@ -15,7 +16,7 @@ def _normalize_value(v: str) -> str:
 
 
 async def reconcile_candidate(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     candidate: Candidate,
     user_id: Optional[str],
     session_id: Optional[str],
@@ -29,7 +30,7 @@ async def reconcile_candidate(
     """
     if not user_id:
         new_id = await mem_repo.insert_memory(
-            conn,
+            session,
             user_id=None,
             session_id=session_id,
             source_turn=source_turn,
@@ -44,11 +45,11 @@ async def reconcile_candidate(
         )
         return new_id, None
 
-    existing = await mem_repo.get_active_memory_by_key(conn, user_id, candidate.key)
+    existing = await mem_repo.get_active_memory_by_key(session, user_id, candidate.key)
 
     if existing is None:
         new_id = await mem_repo.insert_memory(
-            conn,
+            session,
             user_id=user_id,
             session_id=session_id,
             source_turn=source_turn,
@@ -65,7 +66,7 @@ async def reconcile_candidate(
 
     if _normalize_value(existing["value"]) == _normalize_value(candidate.value):
         new_conf = max(existing["confidence"], candidate.confidence)
-        await mem_repo.bump_confidence(conn, str(existing["id"]), new_conf)
+        await mem_repo.bump_confidence(session, str(existing["id"]), new_conf)
         return None, None
 
     metadata = {}
@@ -74,7 +75,7 @@ async def reconcile_candidate(
 
     old_id = str(existing["id"])
     new_id = await mem_repo.insert_memory(
-        conn,
+        session,
         user_id=user_id,
         session_id=session_id,
         source_turn=source_turn,
@@ -87,7 +88,7 @@ async def reconcile_candidate(
         supersedes=old_id,
         metadata=metadata,
     )
-    await mem_repo.supersede_memory(conn, old_id, new_id)
+    await mem_repo.supersede_memory(session, old_id, new_id)
     logger.info(
         "Superseded %s (key=%s, %r → %r)",
         old_id,

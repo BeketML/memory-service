@@ -4,12 +4,12 @@ import logging
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 
-from src.config import settings
 from src.retrieval.embedder import embed
 from src.retrieval.qdrant import upsert_memory
-from src.storage.postgres.pool import get_pool
-from src.storage.qdrant.collection import get_qdrant_client
+from src.storage.postgres.database import get_session
+from src.storage.postgres.models import Memory
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,39 +22,31 @@ async def reindex() -> JSONResponse:
     Re-upserts all memories without deleting the collection — safe to call
     while the service is running, safe for pre-existing collections.
     """
-    pool = await get_pool()
-    client = get_qdrant_client()
-
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, user_id, session_id, source_turn,
-                   type, key, value, canonical_text, confidence,
-                   active, stance
-            FROM memories
-            ORDER BY created_at
-            """
+    async with get_session() as session:
+        result = await session.execute(
+            select(Memory).order_by(Memory.created_at)
         )
+        rows = result.scalars().all()
 
     count = 0
     for row in rows:
         try:
-            emb = await embed(row["canonical_text"])
+            emb = await embed(row.canonical_text)
             payload = {
-                "memory_id": str(row["id"]),
-                "user_id": row["user_id"],
-                "session_id": row["session_id"],
-                "type": str(row["type"]),
-                "key": row["key"],
-                "value": row["value"],
-                "canonical_text": row["canonical_text"],
-                "confidence": float(row["confidence"]),
-                "active": bool(row["active"]),
-                "source_turn_id": str(row["source_turn"]) if row["source_turn"] else None,
+                "memory_id": str(row.id),
+                "user_id": row.user_id,
+                "session_id": row.session_id,
+                "type": row.type.value if hasattr(row.type, "value") else str(row.type),
+                "key": row.key,
+                "value": row.value,
+                "canonical_text": row.canonical_text,
+                "confidence": float(row.confidence),
+                "active": bool(row.active),
+                "source_turn_id": str(row.source_turn) if row.source_turn else None,
             }
-            await upsert_memory(str(row["id"]), emb, payload)
+            await upsert_memory(str(row.id), emb, payload)
             count += 1
         except Exception as exc:
-            logger.warning("Failed to reindex memory %s: %s", row["id"], exc)
+            logger.warning("Failed to reindex memory %s: %s", row.id, exc)
 
     return JSONResponse({"reindexed": count})

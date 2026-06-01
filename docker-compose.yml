@@ -1,3 +1,4 @@
+name: Higgsfield AI Memory Service
 services:
   postgres:
     image: postgres:16-alpine

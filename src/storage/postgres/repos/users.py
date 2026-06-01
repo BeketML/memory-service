@@ -1,26 +1,31 @@
 from __future__ import annotations
 
-import json
 from typing import Optional
-import asyncpg
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.storage.postgres.models import User
 
 
-async def upsert_user(conn: asyncpg.Connection, user_id: str, metadata: dict) -> None:
-    await conn.execute(
-        """
-        INSERT INTO users (user_id, metadata)
-        VALUES ($1, $2::jsonb)
-        ON CONFLICT (user_id) DO NOTHING
-        """,
-        user_id,
-        json.dumps(metadata),
+async def upsert_user(session: AsyncSession, user_id: str, metadata: dict) -> None:
+    stmt = (
+        insert(User)
+        .values(user_id=user_id, metadata_=metadata)
+        .on_conflict_do_nothing(index_elements=["user_id"])
     )
+    await session.execute(stmt)
 
 
-async def delete_user(conn: asyncpg.Connection, user_id: str) -> None:
-    await conn.execute("DELETE FROM users WHERE user_id = $1", user_id)
+async def delete_user(session: AsyncSession, user_id: str) -> None:
+    user = await session.get(User, user_id)
+    if user is not None:
+        await session.delete(user)
 
 
-async def user_exists(conn: asyncpg.Connection, user_id: str) -> bool:
-    row = await conn.fetchrow("SELECT 1 FROM users WHERE user_id = $1", user_id)
-    return row is not None
+async def user_exists(session: AsyncSession, user_id: str) -> bool:
+    result = await session.execute(
+        select(User.user_id).where(User.user_id == user_id).limit(1)
+    )
+    return result.scalar_one_or_none() is not None

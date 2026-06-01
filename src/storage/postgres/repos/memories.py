@@ -1,68 +1,99 @@
 from __future__ import annotations
 
-import json
 import uuid
-from typing import Optional
-import asyncpg
+from typing import Any, Optional
 
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-async def get_active_memories(
-    conn: asyncpg.Connection,
-    user_id: str,
-) -> list[dict]:
-    rows = await conn.fetch(
-        """
-        SELECT id, type, key, value, canonical_text, confidence, stance,
-               active, supersedes, superseded_by,
-               valid_from, created_at, updated_at, session_id
-        FROM memories
-        WHERE user_id = $1 AND active = TRUE
-        ORDER BY key, created_at
-        """,
-        user_id,
+from src.storage.postgres.models import Memory, MemoryType
+
+def _memory_row(row: Memory, fields: str = "full") -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "id": row.id,
+        "type": row.type.value if isinstance(row.type, MemoryType) else row.type,
+        "key": row.key,
+        "value": row.value,
+        "canonical_text": row.canonical_text,
+        "confidence": row.confidence,
+        "stance": row.stance,
+    }
+    if fields == "stable":
+        base["valid_from"] = row.valid_from
+        base["updated_at"] = row.updated_at
+        return base
+    if fields == "active":
+        base.update(
+            {
+                "active": row.active,
+                "supersedes": row.supersedes,
+                "superseded_by": row.superseded_by,
+                "valid_from": row.valid_from,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "session_id": row.session_id,
+            }
+        )
+        return base
+    base.update(
+        {
+            "active": row.active,
+            "supersedes": row.supersedes,
+            "superseded_by": row.superseded_by,
+            "source_turn": row.source_turn,
+            "session_id": row.session_id,
+            "valid_from": row.valid_from,
+            "valid_to": row.valid_to,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+            "metadata": row.metadata_,
+        }
     )
-    return [dict(r) for r in rows]
+    return base
 
 
-async def get_active_stable_facts(
-    conn: asyncpg.Connection,
-    user_id: str,
-) -> list[dict]:
-    rows = await conn.fetch(
-        """
-        SELECT id, type, key, value, canonical_text, confidence, stance,
-               valid_from, updated_at
-        FROM memories
-        WHERE user_id = $1 AND active = TRUE
-          AND type IN ('fact', 'preference')
-        ORDER BY confidence DESC, updated_at DESC
-        """,
-        user_id,
+async def get_active_memories(session: AsyncSession, user_id: str) -> list[dict]:
+    result = await session.execute(
+        select(Memory)
+        .where(Memory.user_id == user_id, Memory.active.is_(True))
+        .order_by(Memory.key, Memory.created_at)
     )
-    return [dict(r) for r in rows]
+    return [_memory_row(row, "active") for row in result.scalars().all()]
+
+
+async def get_active_stable_facts(session: AsyncSession, user_id: str) -> list[dict]:
+    result = await session.execute(
+        select(Memory)
+        .where(
+            Memory.user_id == user_id,
+            Memory.active.is_(True),
+            Memory.type.in_([MemoryType.fact, MemoryType.preference]),
+        )
+        .order_by(Memory.confidence.desc(), Memory.updated_at.desc())
+    )
+    return [_memory_row(row, "stable") for row in result.scalars().all()]
 
 
 async def get_active_memory_by_key(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     user_id: str,
     key: str,
 ) -> Optional[dict]:
-    row = await conn.fetchrow(
-        """
-        SELECT id, type, key, value, canonical_text, confidence, stance,
-               active, supersedes, superseded_by
-        FROM memories
-        WHERE user_id = $1 AND key = $2 AND active = TRUE
-        LIMIT 1
-        """,
-        user_id,
-        key,
+    result = await session.execute(
+        select(Memory)
+        .where(
+            Memory.user_id == user_id,
+            Memory.key == key,
+            Memory.active.is_(True),
+        )
+        .limit(1)
     )
-    return dict(row) if row else None
+    row = result.scalar_one_or_none()
+    return _memory_row(row, "active") if row else None
 
 
 async def insert_memory(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     user_id: Optional[str],
     session_id: Optional[str],
     source_turn: str,
@@ -75,85 +106,62 @@ async def insert_memory(
     supersedes: Optional[str],
     metadata: dict,
 ) -> str:
-    mem_id = str(uuid.uuid4())
-    await conn.execute(
-        """
-        INSERT INTO memories (
-            id, user_id, session_id, source_turn,
-            type, key, value, canonical_text, confidence, stance,
-            active, supersedes, metadata
-        ) VALUES (
-            $1, $2, $3, $4,
-            $5::memory_type, $6, $7, $8, $9, $10,
-            TRUE, $11, $12::jsonb
-        )
-        """,
-        mem_id,
-        user_id,
-        session_id,
-        source_turn,
-        type_,
-        key,
-        value,
-        canonical_text,
-        confidence,
-        stance,
-        supersedes,
-        json.dumps(metadata),
+    mem_type = MemoryType(type_)
+    source_turn_uuid = uuid.UUID(source_turn) if source_turn else None
+    supersedes_uuid = uuid.UUID(supersedes) if supersedes else None
+
+    memory = Memory(
+        user_id=user_id,
+        session_id=session_id,
+        source_turn=source_turn_uuid,
+        type=mem_type,
+        key=key,
+        value=value,
+        canonical_text=canonical_text,
+        confidence=confidence,
+        stance=stance,
+        active=True,
+        supersedes=supersedes_uuid,
+        metadata_=metadata,
     )
-    return mem_id
+    session.add(memory)
+    await session.flush()
+    return str(memory.id)
 
 
 async def supersede_memory(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     old_id: str,
     new_id: str,
 ) -> None:
-    await conn.execute(
-        """
-        UPDATE memories
-        SET active = FALSE,
-            superseded_by = $2,
-            valid_to = now(),
-            updated_at = now()
-        WHERE id = $1
-        """,
-        old_id,
-        new_id,
+    await session.execute(
+        update(Memory)
+        .where(Memory.id == uuid.UUID(old_id))
+        .values(
+            active=False,
+            superseded_by=uuid.UUID(new_id),
+            valid_to=func.now(),
+            updated_at=func.now(),
+        )
     )
 
 
 async def bump_confidence(
-    conn: asyncpg.Connection,
+    session: AsyncSession,
     memory_id: str,
     new_confidence: float,
 ) -> None:
-    await conn.execute(
-        """
-        UPDATE memories
-        SET confidence = $2,
-            updated_at = now()
-        WHERE id = $1
-        """,
-        memory_id,
-        new_confidence,
+    await session.execute(
+        update(Memory)
+        .where(Memory.id == uuid.UUID(memory_id))
+        .values(confidence=new_confidence, updated_at=func.now())
     )
 
 
-async def get_all_memories(
-    conn: asyncpg.Connection,
-    user_id: str,
-) -> list[dict]:
-    rows = await conn.fetch(
-        """
-        SELECT id, type, key, value, canonical_text, confidence, stance,
-               active, supersedes, superseded_by,
-               source_turn, session_id,
-               valid_from, valid_to, created_at, updated_at, metadata
-        FROM memories
-        WHERE user_id = $1
-        ORDER BY key, created_at
-        """,
-        user_id,
+async def get_all_memories(session: AsyncSession, user_id: str) -> list[dict]:
+    result = await session.execute(
+        select(Memory)
+        .where(Memory.user_id == user_id)
+        .order_by(Memory.key, Memory.created_at)
     )
-    return [dict(r) for r in rows]
+    return [_memory_row(row, "full") for row in result.scalars().all()]

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
 from src.schemas.memories import MemoriesResponse, MemoryItem
-from src.storage.postgres.pool import get_pool
+from src.storage.postgres.database import get_session
 from src.storage.postgres.repos import memories as mem_repo
 
 logger = logging.getLogger(__name__)
@@ -16,9 +15,8 @@ router = APIRouter()
 @router.get("/users/{user_id}/memories")
 async def get_memories(user_id: str) -> MemoriesResponse:
     try:
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            rows = await mem_repo.get_all_memories(conn, user_id)
+        async with get_session() as session:
+            rows = await mem_repo.get_all_memories(session, user_id)
 
         items = []
         for row in rows:

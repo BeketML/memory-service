@@ -9,7 +9,7 @@ from src.config import settings
 from src.retrieval.embedder import embed
 from src.retrieval.qdrant import hybrid_search
 from src.retrieval.query_rewrite import expand_query
-from src.storage.postgres.pool import get_pool
+from src.storage.postgres.database import get_session
 from src.storage.postgres.repos import memories as mem_repo
 from src.storage.postgres.repos import turns as turn_repo
 
@@ -22,18 +22,13 @@ async def recall(
     user_id: Optional[str],
     max_tokens: int,
 ) -> dict:
-    pool = await get_pool()
-
-    # Tier 1: stable facts from PG (always)
     tier1: list[dict] = []
     if user_id:
-        async with pool.acquire() as conn:
-            tier1 = await mem_repo.get_active_stable_facts(conn, user_id)
+        async with get_session() as session:
+            tier1 = await mem_repo.get_active_stable_facts(session, user_id)
 
-    # Query expansion for multi-hop queries
     sub_queries = await expand_query(query)
 
-    # Tier 2: hybrid search from Qdrant (all sub-queries, merge by score)
     tier2_raw: list[dict] = []
     seen_ids: set[str] = set()
     for q in sub_queries:
@@ -53,15 +48,12 @@ async def recall(
         except Exception as exc:
             logger.warning("Tier-2 search failed for query '%s': %s", q, exc)
 
-    # Sort by descending score and filter by relevance floor
     tier2_raw.sort(key=lambda x: x.get("score", 0.0), reverse=True)
 
-    # Tier 3: recent session context
     tier3: list[dict] = []
-    async with pool.acquire() as conn:
-        tier3 = await turn_repo.get_recent_turns(conn, session_id, limit=3)
+    async with get_session() as session:
+        tier3 = await turn_repo.get_recent_turns(session, session_id, limit=3)
 
-    # Assemble under budget
     selected1, selected2, selected3 = assemble_context(
         tier1_facts=tier1,
         tier2_memories=tier2_raw,

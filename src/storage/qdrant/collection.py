@@ -46,9 +46,11 @@ async def _ensure_collection() -> None:
         await client.create_collection(
             collection_name=settings.qdrant_collection,
             vectors_config={
-                "dense": VectorParams(size=1024, distance=Distance.COSINE),
+                # OpenAI text-embedding-3-small: 1536-d
+                "dense": VectorParams(size=settings.dense_dim, distance=Distance.COSINE),
+                # colbert-ir/colbertv2.0: 128-d multivector late-interaction
                 "colbert": VectorParams(
-                    size=1024,
+                    size=settings.colbert_dim,
                     distance=Distance.COSINE,
                     multivector_config=MultiVectorConfig(
                         comparator=MultiVectorComparator.MAX_SIM
@@ -56,13 +58,15 @@ async def _ensure_collection() -> None:
                 ),
             },
             sparse_vectors_config={
+                # BM25 with IDF weighting applied by Qdrant at query time
                 "sparse": SparseVectorParams(modifier=Modifier.IDF),
             },
         )
-        logger.info("Created Qdrant collection '%s'", settings.qdrant_collection)
+        logger.info("Created Qdrant collection '%s' (dense=%d-d, colbert=%d-d)",
+                    settings.qdrant_collection, settings.dense_dim, settings.colbert_dim)
     else:
         logger.info(
-            "Qdrant collection '%s' already exists — using as-is (no schema changes)",
+            "Qdrant collection '%s' already exists — using as-is",
             settings.qdrant_collection,
         )
 
