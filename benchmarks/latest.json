@@ -1,0 +1,178 @@
+{
+  "run_at": "2026-06-02T13:50:45.601086+00:00",
+  "service_url": "http://localhost:8080",
+  "overall": {
+    "passed": 52,
+    "total": 56,
+    "score": 0.9286,
+    "pct": "93%"
+  },
+  "categories": [
+    {
+      "number": 1,
+      "name": "Recall Quality",
+      "passed": 8,
+      "total": 10,
+      "score": 0.8,
+      "pct": "80%",
+      "emoji": "\u26a0\ufe0f",
+      "details": [
+        "  \u2713 [employment_supersession] 'Where does this user work now?'",
+        "  \u2713 [employment_supersession] 'Where does this user live?'",
+        "  \u2713 [employment_supersession] \"What is the user's pet's name?\"",
+        "  \u2713 [employment_supersession] 'What city does the user with the dog named Biscuit live in?'",
+        "  \u2717 [opinion_arc] 'How does this user feel about TypeScript?' \u2014 missing ['typescript']",
+        "  \u2717 [opinion_arc] 'What programming languages does the user have opinions about?' \u2014 missing ['typescript']",
+        "  \u2713 [implicit_facts] \"What is the user's dog's name?\"",
+        "  \u2713 [implicit_facts] 'What dietary restrictions does this user have?'",
+        "  \u2713 [noise_resistance] \"What is the user's favorite hiking trail?\"",
+        "  \u2713 [noise_resistance] 'Does the user have any siblings?'"
+      ]
+    },
+    {
+      "number": 2,
+      "name": "Fact Evolution",
+      "passed": 6,
+      "total": 6,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 'Where does this user work?' \u2192 found 'notion'",
+        "  \u2713 Supersession chain intact for 'Where does this user work?'",
+        "  \u2713 'Where does this user live?' \u2192 found 'berlin'",
+        "  \u2713 Supersession chain intact for 'Where does this user live?'",
+        "  \u2713 'What language does this user prefer?' \u2192 found 'typescript'",
+        "  \u2713 Supersession chain intact for 'What language does this user prefer?'"
+      ]
+    },
+    {
+      "number": 3,
+      "name": "Multi-hop Recall",
+      "passed": 3,
+      "total": 3,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 Pet name (Biscuit) found",
+        "  \u2713 City (Berlin) found",
+        "  \u2713 Multi-hop: Berlin for Biscuit's owner found"
+      ]
+    },
+    {
+      "number": 4,
+      "name": "Noise Resistance",
+      "passed": 5,
+      "total": 5,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 No hallucination for: \"What is this user's favorite hiking trail?\"",
+        "  \u2713 No hallucination for: 'Does this user have any siblings?'",
+        "  \u2713 No hallucination for: \"What is this user's credit card number?\"",
+        "  \u2713 Cold session returns empty context",
+        "  \u2713 Off-topic query returns 200"
+      ]
+    },
+    {
+      "number": 5,
+      "name": "Extraction Quality",
+      "passed": 6,
+      "total": 6,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 6 memories extracted",
+        "  \u2713 All memory types valid enum values",
+        "  \u2713 All keys use dot-notation",
+        "  \u2713 All confidence values in [0,1]",
+        "  \u2713 Implicit pet fact (Biscuit) extracted",
+        "  \u2713 All memories have source_turn provenance"
+      ]
+    },
+    {
+      "number": 6,
+      "name": "Persistence (restart)",
+      "passed": 1,
+      "total": 1,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u23ed Skipped (no Docker / SKIP_RESTART_TEST=1)"
+      ]
+    },
+    {
+      "number": 7,
+      "name": "Cross-session Scoping",
+      "passed": 4,
+      "total": 4,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 User A cross-session: Tokyo visible",
+        "  \u2713 User A cross-session: Mochi visible",
+        "  \u2713 No cross-user bleed: A cannot see Amazon (B's data)",
+        "  \u2713 No cross-user bleed: B cannot see Tokyo/Mochi (A's data)"
+      ]
+    },
+    {
+      "number": 8,
+      "name": "Robustness",
+      "passed": 6,
+      "total": 8,
+      "score": 0.75,
+      "pct": "75%",
+      "emoji": "\u26a0\ufe0f",
+      "details": [
+        "  \u2713 /turns bad input \u2192 400",
+        "  \u2717 /turns bad input \u2192 500 (expected 4xx)",
+        "  \u2713 /turns bad input \u2192 400",
+        "  \u2713 /recall bad input \u2192 400",
+        "  \u2717 /recall bad input \u2192 500 (expected 4xx)",
+        "  \u2713 /search bad input \u2192 400",
+        "  \u2713 Service alive after bad-request barrage",
+        "  \u2713 Unicode/emoji content \u2192 201"
+      ]
+    },
+    {
+      "number": 9,
+      "name": "Correctness (sync)",
+      "passed": 4,
+      "total": 4,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 POST /turns \u2192 201",
+        "  \u2713 /memories immediately has 2 row(s)",
+        "  \u2713 /recall non-empty immediately after 201",
+        "  \u2713 turn_id matches source_turn in memories"
+      ]
+    },
+    {
+      "number": 10,
+      "name": "Contract Compliance",
+      "passed": 9,
+      "total": 9,
+      "score": 1.0,
+      "pct": "100%",
+      "emoji": "\u2705",
+      "details": [
+        "  \u2713 GET /health \u2192 200 {status:ok}",
+        "  \u2713 POST /turns \u2192 201 {id: UUID}",
+        "  \u2713 POST /recall \u2192 200 {context, citations[]}",
+        "  \u2713 POST /search \u2192 200 {results[]}",
+        "  \u2713 GET /memories \u2192 200 {2 memories}",
+        "  \u2713 DELETE /sessions \u2192 204",
+        "  \u2713 DELETE /users \u2192 204",
+        "  \u2713 Cold session /recall \u2192 200 {context:'',citations:[]}",
+        "  \u2713 DELETE nonexistent session \u2192 204 (idempotent)"
+      ]
+    }
+  ]
+}

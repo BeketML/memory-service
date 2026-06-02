@@ -1049,3 +1049,43 @@ Full wipe: cascades to all sessions, turns, and memories for the user. Deletes a
 {"reindexed": 42}
 ```
 Rebuilds the Qdrant index from Postgres. Safe to call while the service is running. Use after Qdrant recovery or if the two stores drift.
+
+<!-- BENCHMARK_START -->
+
+## Benchmark Results
+
+Last run: **2026-06-02 13:50:45 UTC** against `http://localhost:8080`
+
+### Overall score: **52/56 (93%)**
+
+| # | Category | Passed | Score | Status |
+|---|---|---|---|---|
+|  1 | Recall Quality | 8/10 | 80% | ⚠️ |
+|  2 | Fact Evolution | 6/6 | 100% | ✅ |
+|  3 | Multi-hop Recall | 3/3 | 100% | ✅ |
+|  4 | Noise Resistance | 5/5 | 100% | ✅ |
+|  5 | Extraction Quality | 6/6 | 100% | ✅ |
+|  6 | Persistence (restart) | 1/1 | 100% | ✅ |
+|  7 | Cross-session Scoping | 4/4 | 100% | ✅ |
+|  8 | Robustness | 6/8 | 75% | ⚠️ |
+|  9 | Correctness (sync) | 4/4 | 100% | ✅ |
+| 10 | Contract Compliance | 9/9 | 100% | ✅ |
+
+#### Category descriptions (task.md §9)
+
+| # | Category | What is measured |
+|---|---|---|
+| 1 | Recall Quality | Primary signal: does `/recall` surface facts a follow-up question depends on? |
+| 2 | Fact Evolution | Contradictions detected; old fact superseded; history preserved; current fact in `/recall` |
+| 3 | Multi-hop Recall | Questions connecting two separate memories (e.g. pet name + city) |
+| 4 | Noise Resistance | Off-topic queries return empty context — no hallucination |
+| 5 | Extraction Quality | `/memories` shows structured typed rows (not raw message chunks) |
+| 6 | Persistence | Facts written before restart are recallable after `docker compose restart` |
+| 7 | Cross-session Scoping | Same-user cross-session sharing works; different users are isolated |
+| 8 | Robustness | Malformed input → 4xx; service stays up; unicode accepted |
+| 9 | Correctness (sync) | After POST /turns returns 201, data immediately in `/recall` and `/memories` |
+| 10 | Contract Compliance | All 7 endpoints return correct status codes and response shapes |
+
+> Run yourself: `pytest tests/test_benchmark.py -v -s`
+
+<!-- BENCHMARK_END -->

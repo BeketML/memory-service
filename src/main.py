@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -56,6 +56,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
+    # Delegate to specific handlers rather than swallowing them into 500.
+    # The generic Exception handler is called by Starlette before more-specific
+    # handlers in some middleware orderings, so we route explicitly here.
+    if isinstance(exc, RequestValidationError):
+        return await validation_exception_handler(request, exc)
+    if isinstance(exc, HTTPException):
+        from fastapi.exception_handlers import http_exception_handler
+        return await http_exception_handler(request, exc)
     logger.exception("Unhandled exception: %s", exc)
     return JSONResponse(
         status_code=500,
