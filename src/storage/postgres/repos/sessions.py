@@ -23,8 +23,9 @@ async def upsert_session(
     stmt = ins.on_conflict_do_update(
         index_elements=["session_id"],
         set_={
+            # Use the actual DB column names (not the Python attribute aliases).
             "last_active_at": func.now(),
-            "metadata_": ins.excluded.metadata_,
+            "metadata": ins.excluded["metadata"],
         },
     )
     await session.execute(stmt)

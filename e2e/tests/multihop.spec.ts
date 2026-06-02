@@ -1,88 +1,89 @@
 /**
- * Multi-hop recall tests — task.md §9 evaluation category
+ * Multi-hop recall tests — task.md §9 probe queries
  *
- * Scenario: user establishes two separate facts (pet name + city) in
- * separate turns. A query that asks about *both* should surface them.
+ * "What city does the user with the dog named Biscuit live in?" requires
+ * connecting two separate facts (pet.name + location.city) for the same user.
+ * The recall pipeline achieves this by retrieving ALL active facts for the
+ * user (Tier-1 PG) plus hybrid Qdrant search — no explicit graph traversal
+ * needed because both facts share the same user_id.
  *
- * e.g. "What city does the user with the dog named Biscuit live in?"
- * requires connecting pet.name=Biscuit with location.city=Berlin.
+ * Fixture: fixtures/custom_scenarios.json → multihop_pet_city
  */
 import { test, expect } from '@playwright/test';
 import { uid, postTurn, recall, cleanupUser } from './helpers';
 
-test.describe('Multi-hop recall', () => {
+test.describe('Multi-hop recall — pet name + city', () => {
   let userId: string;
   let sess1: string;
   let sess2: string;
 
   test.beforeAll(async ({ request }) => {
-    userId = uid('mhop-user');
-    sess1 = uid('mhop-s1');
-    sess2 = uid('mhop-s2');
+    userId = uid('hop-user');
+    sess1  = uid('hop-s1');
+    sess2  = uid('hop-s2');
 
-    // Fact 1: dog named Biscuit
+    // Session 1: establish pet fact
     await postTurn(request, {
-      session_id: sess1,
-      user_id: userId,
+      session_id: sess1, user_id: userId,
       messages: [
-        { role: 'user', content: 'My dog Biscuit is a golden retriever. She loves the park!' },
-        { role: 'assistant', content: 'What a lovely name!' },
+        { role: 'user',      content: 'I have a golden retriever named Biscuit.' },
+        { role: 'assistant', content: 'Biscuit sounds adorable!' },
       ],
-      timestamp: '2025-03-01T08:00:00Z',
+      timestamp: '2025-03-01T10:00:00Z',
     });
 
-    // Fact 2: moved to Berlin
+    // Session 2: establish location fact (separate session — tests cross-session recall)
     await postTurn(request, {
-      session_id: sess2,
-      user_id: userId,
+      session_id: sess2, user_id: userId,
       messages: [
-        { role: 'user', content: 'I just moved from NYC to Berlin last month.' },
-        { role: 'assistant', content: 'Berlin is a fantastic city!' },
+        { role: 'user',      content: 'I just moved to Berlin from NYC last month.' },
+        { role: 'assistant', content: 'Berlin is a great city! How are you settling in?' },
       ],
-      timestamp: '2025-03-15T09:00:00Z',
+      timestamp: '2025-03-15T10:00:00Z',
     });
   });
 
-  test.afterAll(async ({ request }) => {
-    await cleanupUser(request, userId);
+  test.afterAll(async ({ request }) => { await cleanupUser(request, userId); });
+
+  test('single-hop: pet name', async ({ request }) => {
+    const res  = await recall(request, "What is the user's dog's name?", userId, uid('probe'));
+    const body = await res.json();
+    expect(res.status()).toBe(200);
+    expect(body.context.toLowerCase()).toContain('biscuit');
+    console.log('  pet context:', body.context.slice(0, 200));
   });
 
-  test('both facts appear in /memories', async ({ request }) => {
-    const res = await request.get(`/users/${userId}/memories`);
-    const { memories } = await res.json();
-    const values = memories.map((m: any) => m.value.toLowerCase());
-    console.log('  extracted values:', values);
+  test('single-hop: city', async ({ request }) => {
+    const res  = await recall(request, 'Where does the user live?', userId, uid('probe'));
+    const body = await res.json();
+    expect(body.context.toLowerCase()).toContain('berlin');
+  });
 
-    const hasBiscuit = values.some((v: string) => v.includes('biscuit'));
-    const hasBerlin = values.some((v: string) => v.includes('berlin'));
-    expect(hasBiscuit).toBe(true);
+  test('multi-hop: city of user with dog named Biscuit', async ({ request }) => {
+    const res  = await recall(
+      request,
+      'What city does the user with the dog named Biscuit live in?',
+      userId,
+      uid('probe'),
+    );
+    const body = await res.json();
+    expect(res.status()).toBe(200);
+    // Both facts should surface — either direct match or both in Tier-1
+    const ctx = body.context.toLowerCase();
+    const hasBerlin  = ctx.includes('berlin');
+    const hasBiscuit = ctx.includes('biscuit');
+    console.log(`  multi-hop ctx (berlin=${hasBerlin}, biscuit=${hasBiscuit}):`, body.context.slice(0, 300));
+    // At minimum the answer (Berlin) must be in context
     expect(hasBerlin).toBe(true);
   });
 
-  test('recall query connecting dog + city surfaces Berlin', async ({ request }) => {
-    const res = await recall(
-      request,
-      "What city does the user with the dog named Biscuit live in?",
-      userId,
-      uid('probe-sess'),
-    );
-    const body = await res.json();
-    const ctx = body.context.toLowerCase();
-    console.log('  multi-hop context:', body.context.slice(0, 400));
-
-    // At minimum, Berlin should appear (Tier-1 PG fact)
-    expect(ctx).toContain('berlin');
-  });
-
-  test('recall surfaces Biscuit in context', async ({ request }) => {
-    const res = await recall(
-      request,
-      "Tell me about the user's pet",
-      userId,
-      uid('probe-sess'),
-    );
-    const body = await res.json();
-    const ctx = body.context.toLowerCase();
-    expect(ctx).toContain('biscuit');
+  test('/memories has both active facts (pet + city)', async ({ request }) => {
+    const res = await request.get(`/users/${userId}/memories`);
+    const { memories } = await res.json();
+    const active = memories.filter((m: any) => m.active);
+    const hasPet  = active.some((m: any) => m.value?.toLowerCase().includes('biscuit'));
+    const hasCity = active.some((m: any) => m.value?.toLowerCase().includes('berlin'));
+    expect(hasPet).toBe(true);
+    expect(hasCity).toBe(true);
   });
 });

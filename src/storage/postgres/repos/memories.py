@@ -129,11 +129,44 @@ async def insert_memory(
     return str(memory.id)
 
 
+async def deactivate_memory(session: AsyncSession, memory_id: str) -> None:
+    """Set a memory inactive without linking superseded_by yet.
+
+    Call this BEFORE inserting the superseding memory so the partial unique
+    index (active=true on fact/preference keys) doesn't block the INSERT.
+    """
+    await session.execute(
+        update(Memory)
+        .where(Memory.id == uuid.UUID(memory_id))
+        .values(active=False, valid_to=func.now(), updated_at=func.now())
+    )
+
+
+async def set_superseded_by(
+    session: AsyncSession,
+    old_id: str,
+    new_id: str,
+) -> None:
+    """Wire the superseded_by back-reference after the new memory is inserted."""
+    await session.execute(
+        update(Memory)
+        .where(Memory.id == uuid.UUID(old_id))
+        .values(superseded_by=uuid.UUID(new_id), updated_at=func.now())
+    )
+
+
 async def supersede_memory(
     session: AsyncSession,
     old_id: str,
     new_id: str,
 ) -> None:
+    """Atomically deactivate old and link superseded_by.
+
+    Only correct when the new memory is inserted in the same flush cycle and
+    the old memory is NOT a fact/preference that would hit the partial unique
+    index.  For fact/preference supersession use deactivate_memory + flush
+    + insert_memory + set_superseded_by instead.
+    """
     await session.execute(
         update(Memory)
         .where(Memory.id == uuid.UUID(old_id))

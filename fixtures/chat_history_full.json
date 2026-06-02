@@ -1,0 +1,205 @@
+{
+  "_usage": "NOT for POST /turns directly. Send each file from fixtures/post_turns/full_history/01..08 in order. Probes: fixtures/post_recall/full_history/",
+  "description": "Полная история чата — сценарий + probes (обёртка для тестов/e2e)",
+  "user_id": "test-user-full-history",
+  "cleanup": {
+    "delete_user": "DELETE /users/test-user-full-history"
+  },
+  "turns": [
+    {
+      "session_id": "full-history-sess-1",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-01T09:00:00.000Z",
+      "metadata": { "channel": "web", "locale": "en-US" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hey! I'm Alex. I just joined Stripe as a backend engineer last week. Still figuring out the onboarding docs."
+        },
+        {
+          "role": "assistant",
+          "content": "Welcome to Stripe, Alex! Onboarding can be overwhelming at first. What stack are you working with?"
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-1",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-01T09:08:00.000Z",
+      "metadata": { "channel": "web" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Mostly TypeScript and Go. I live in NYC with my golden retriever Biscuit — she keeps me sane after long standups."
+        },
+        {
+          "role": "assistant",
+          "content": "TypeScript and Go are a solid combo. Biscuit sounds like great company after standups!"
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-1",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-01T09:15:00.000Z",
+      "metadata": { "channel": "web" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "I'm vegetarian and allergic to shellfish, so please no seafood suggestions when we plan team lunches."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it — vegetarian, no shellfish. I'll keep that in mind for any food recommendations."
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-2",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-10T14:30:00.000Z",
+      "metadata": { "channel": "web", "topic": "debugging" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "My React dashboard re-renders way too much. React Profiler shows wasted renders on the metrics panel."
+        },
+        {
+          "role": "assistant",
+          "content": "That often points to missing memoization or unstable props. Have you wrapped the metrics panel in React.memo?"
+        },
+        {
+          "role": "tool",
+          "name": "read_file",
+          "content": "Dashboard.tsx:42 — MetricsPanel receives inline arrow function as onRefresh prop each render."
+        },
+        {
+          "role": "assistant",
+          "content": "The inline onRefresh callback is recreated every render, which defeats memoization. Try useCallback for that handler."
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-2",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-10T14:45:00.000Z",
+      "metadata": { "channel": "web" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Fixed it with useCallback — profiler looks much better now. Also prepping for a system design interview at a FAANG company next month."
+        },
+        {
+          "role": "assistant",
+          "content": "Nice fix! For system design, practice explaining trade-offs out loud — latency vs consistency, cache invalidation, that kind of thing."
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-3",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-15T10:20:41.963Z",
+      "metadata": { "channel": "web", "life_update": true },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Big life update — I just started at Notion as a PM, and I moved to Berlin from NYC. Biscuit loves the new parks here."
+        },
+        {
+          "role": "assistant",
+          "content": "Congratulations on Notion and Berlin! Glad Biscuit is enjoying the parks."
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-3",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-15T10:35:00.000Z",
+      "metadata": { "channel": "web" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Honestly TypeScript generics are getting really annoying lately — too much boilerplate for simple APIs."
+        },
+        {
+          "role": "assistant",
+          "content": "That's a common frustration. Some teams dial back generic-heavy patterns for internal tooling."
+        }
+      ]
+    },
+    {
+      "session_id": "full-history-sess-3",
+      "user_id": "test-user-full-history",
+      "timestamp": "2025-03-15T10:42:00.000Z",
+      "metadata": { "channel": "web", "correction": true },
+      "messages": [
+        {
+          "role": "user",
+          "content": "Actually, sorry — I meant I'm allergic to peanuts, not shellfish. Shellfish is fine in small amounts."
+        },
+        {
+          "role": "assistant",
+          "content": "Thanks for the correction — peanut allergy noted, and shellfish is okay in moderation."
+        }
+      ]
+    }
+  ],
+  "recall_probes": [
+    {
+      "query": "Where does this user work now?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": ["notion", "pm"]
+    },
+    {
+      "query": "Where does this user live?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": ["berlin"]
+    },
+    {
+      "query": "What city does the user with the dog named Biscuit live in?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": ["berlin", "biscuit"]
+    },
+    {
+      "query": "What dietary restrictions does this user have?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": ["vegetarian", "peanut"]
+    },
+    {
+      "query": "How does the user feel about TypeScript?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": ["typescript"]
+    },
+    {
+      "query": "What was the user debugging recently?",
+      "session_id": "full-history-sess-2",
+      "max_tokens": 512,
+      "expected_in_context": ["react", "re-render"]
+    },
+    {
+      "query": "What is the user's favorite hiking trail?",
+      "session_id": "full-history-sess-3",
+      "max_tokens": 512,
+      "expected_in_context": [],
+      "notes": "Noise — topic never discussed; context should be empty or omit hiking"
+    }
+  ],
+  "search_probes": [
+    {
+      "query": "Biscuit dog Berlin",
+      "user_id": "test-user-full-history",
+      "limit": 5
+    },
+    {
+      "query": "Stripe employer",
+      "user_id": "test-user-full-history",
+      "limit": 5,
+      "notes": "May return superseded Stripe memory in structured search"
+    }
+  ]
+}

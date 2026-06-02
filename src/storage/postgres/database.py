@@ -11,8 +11,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.storage.postgres.models import Base
-
 _engine: Optional[AsyncEngine] = None
 _session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
@@ -28,6 +26,11 @@ def _normalize_dsn(dsn: str) -> str:
 
 
 async def init_db(dsn: str) -> None:
+    """Initialise the SQLAlchemy async engine and session factory.
+
+    Schema creation is handled by Alembic (``alembic upgrade head`` runs in
+    the entrypoint before the server starts) — no ``create_all`` here.
+    """
     global _engine, _session_factory
     _engine = create_async_engine(
         _normalize_dsn(dsn),
@@ -40,9 +43,6 @@ async def init_db(dsn: str) -> None:
         class_=AsyncSession,
         expire_on_commit=False,
     )
-    async with _engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-        await conn.run_sync(Base.metadata.create_all)
 
 
 async def close_db() -> None:

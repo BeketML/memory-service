@@ -1,96 +1,72 @@
 /**
- * Noise resistance tests — task.md §9 evaluation category
+ * Noise resistance tests — task.md §9
  *
- * The service must:
- *   • Return empty context for queries about topics never discussed
- *   • Return empty context for cold sessions (no data at all)
- *   • Never return hallucinated memories
+ * Queries about topics the user NEVER discussed must not produce fabricated
+ * memories.  The service will still surface real Tier-1 facts for known
+ * users (this is by design — the agent benefits from known facts even for
+ * tangential queries), but it must NOT invent hiking trails, siblings, etc.
+ *
+ * For a brand-new unknown user the context must be empty ("").
+ *
+ * Fixture: fixtures/custom_scenarios.json → noise_resistance
  */
 import { test, expect } from '@playwright/test';
 import { uid, postTurn, recall, cleanupUser } from './helpers';
 
-test.describe('Noise resistance', () => {
+test.describe('Noise resistance — no hallucinated memories', () => {
   let userId: string;
-  let sessionId: string;
 
   test.beforeAll(async ({ request }) => {
     userId = uid('noise-user');
-    sessionId = uid('noise-sess');
-
-    // Only talk about work — nothing about hiking, siblings, hobbies
     await postTurn(request, {
-      session_id: sessionId,
+      session_id: uid('noise-sess'),
       user_id: userId,
       messages: [
-        { role: 'user', content: 'I work as a data scientist at Meta and I love Python.' },
-        { role: 'assistant', content: 'Python is great for data science!' },
+        { role: 'user',      content: 'I work as a data scientist and I love Python.' },
+        { role: 'assistant', content: 'Python is excellent for data science!' },
       ],
+      timestamp: '2025-03-01T10:00:00Z',
     });
   });
 
-  test.afterAll(async ({ request }) => {
-    await cleanupUser(request, userId);
-  });
+  test.afterAll(async ({ request }) => { await cleanupUser(request, userId); });
 
-  test('off-topic query returns empty context (not hallucinated hiking info)', async ({ request }) => {
-    const res = await recall(
-      request,
-      "What is the user's favorite hiking trail?",
-      userId,
-      uid('probe-sess'),
-    );
+  test('hiking trail query — no fabricated hiking facts', async ({ request }) => {
+    const res  = await recall(request, "What is the user's favorite hiking trail?", userId, uid('probe'));
+    const body = await res.json();
     expect(res.status()).toBe(200);
-    const body = await res.json();
-    console.log('  noise context:', JSON.stringify(body.context).slice(0, 200));
-    // Should be empty OR contain only known facts (work/Python) — not hiking info
     const ctx = body.context.toLowerCase();
-    expect(ctx).not.toContain('hik');
+    // Must NOT hallucinate a hiking trail
     expect(ctx).not.toContain('trail');
+    expect(ctx).not.toContain('hiking');
     expect(ctx).not.toContain('mountain');
+    console.log('  noise/hiking ctx:', body.context.slice(0, 200));
   });
 
-  test('query about siblings returns empty context', async ({ request }) => {
-    const res = await recall(
-      request,
-      'Does the user have any siblings?',
-      userId,
-      uid('probe-sess'),
-    );
+  test('siblings query — no fabricated family info', async ({ request }) => {
+    const res  = await recall(request, 'Does the user have any siblings?', userId, uid('probe'));
     const body = await res.json();
-    const ctx = body.context.toLowerCase();
+    const ctx  = body.context.toLowerCase();
     expect(ctx).not.toContain('sibling');
     expect(ctx).not.toContain('brother');
     expect(ctx).not.toContain('sister');
   });
 
-  test('cold user + cold session returns empty context and empty citations', async ({ request }) => {
-    const res = await recall(
-      request,
-      'Tell me everything about this person.',
-      uid('absolute-cold-user'),
-      uid('absolute-cold-sess'),
-    );
-    expect(res.status()).toBe(200);
+  test('sensitive / never-discussed topic — no fabricated info', async ({ request }) => {
+    const res  = await recall(request, "What is the user's credit card number?", userId, uid('probe'));
     const body = await res.json();
-    expect(body.context).toBe('');
-    expect(body.citations).toEqual([]);
+    const ctx  = body.context.toLowerCase();
+    expect(ctx).not.toContain('credit');
+    expect(ctx).not.toContain('card');
+    expect(ctx).not.toMatch(/\d{4}[\s-]?\d{4}/); // no fake card numbers
   });
 
-  test('known topic IS returned (sanity check — not over-filtering)', async ({ request }) => {
-    const res = await recall(
-      request,
-      'What programming language does the user prefer?',
-      userId,
-      uid('probe-sess'),
+  test('cold (unknown) user returns empty context', async ({ request }) => {
+    const res  = await recall(request, 'Tell me about this user.', null, uid('cold-sess'),
     );
     const body = await res.json();
-    // Python should appear — we ingested it
-    const ctx = body.context.toLowerCase();
-    console.log('  known-topic context:', body.context.slice(0, 300));
-    // Lenient: if no memory was extracted, context may be empty — that's OK for noise test
-    // but we note if extraction didn't capture Python
-    if (!ctx.includes('python')) {
-      console.log('  ⚠ Python not found in recall — extraction may not have captured it');
-    }
+    expect(res.status()).toBe(200);
+    expect(body.context).toBe('');
+    expect(body.citations).toEqual([]);
   });
 });

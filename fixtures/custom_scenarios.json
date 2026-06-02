@@ -1,0 +1,277 @@
+{
+  "description": "Custom recall-quality and quality scenarios for task.md §7 custom cases",
+  "notes": [
+    "Each scenario uses isolated user/session IDs prefixed with the scenario name.",
+    "expected_facts: strings that MUST appear (case-insensitive) in /recall context.",
+    "forbidden_facts: strings that must NOT appear in /recall context (hallucination guard).",
+    "supersession checks are performed via /users/{id}/memories inspection.",
+    "All data is cleaned up via DELETE /users/{id} at end of each test."
+  ],
+  "scenarios": [
+    {
+      "name": "fact_evolution_employer",
+      "description": "Employment supersession: Stripe→Notion across sessions. Recall must return current employer; /memories must show supersession chain.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I'm a backend engineer at Stripe."},
+            {"role": "assistant", "content": "Nice, Stripe is great!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "Big news — I just started at Notion as a PM!"},
+            {"role": "assistant", "content": "Congratulations on the new role at Notion!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "Where does this user work now?",
+          "expected_facts": ["notion"],
+          "forbidden_facts": [],
+          "notes": "Must return current employer (Notion), not stale (Stripe)"
+        }
+      ],
+      "supersession_checks": [
+        {"key_contains": "employer", "active_value": "Notion", "inactive_value": "Stripe"}
+      ]
+    },
+    {
+      "name": "fact_evolution_location",
+      "description": "Location supersession: NYC→Berlin. Same pattern as employer.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I live in New York City."},
+            {"role": "assistant", "content": "NYC is a vibrant city!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I just moved to Berlin last month — loving it so far!"},
+            {"role": "assistant", "content": "Berlin is a great city! How are you settling in?"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "Where does this user live?",
+          "expected_facts": ["berlin"],
+          "forbidden_facts": [],
+          "notes": "Must return Berlin (current), not NYC (stale)"
+        }
+      ],
+      "supersession_checks": [
+        {"key_contains": "city", "active_value": "Berlin", "inactive_value": "NYC"}
+      ]
+    },
+    {
+      "name": "multihop_pet_city",
+      "description": "Multi-hop: user has a pet named Biscuit and lives in Berlin. Query connects both facts.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I have a golden retriever named Biscuit."},
+            {"role": "assistant", "content": "Biscuit sounds adorable!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I just moved to Berlin from NYC."},
+            {"role": "assistant", "content": "Berlin is a great city!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "What is the user's dog's name?",
+          "expected_facts": ["biscuit"],
+          "forbidden_facts": [],
+          "notes": "Pet name from session 1"
+        },
+        {
+          "query": "What city does the user with the dog named Biscuit live in?",
+          "expected_facts": ["berlin"],
+          "forbidden_facts": [],
+          "notes": "Multi-hop: connects pet (Biscuit) with city (Berlin) for the same user"
+        }
+      ]
+    },
+    {
+      "name": "opinion_arc",
+      "description": "Opinion evolves from positive to negative. Latest stance must be active; prior stance preserved in chain.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I absolutely love TypeScript — it's made my code so much safer."},
+            {"role": "assistant", "content": "TypeScript does help catch errors early!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-15T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "TypeScript generics are getting really annoying lately. Too much boilerplate."},
+            {"role": "assistant", "content": "Complex generics can definitely add overhead."}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "How does this user feel about TypeScript?",
+          "expected_facts": ["typescript"],
+          "forbidden_facts": [],
+          "notes": "Current opinion about TypeScript should appear; latest stance in the arc"
+        }
+      ]
+    },
+    {
+      "name": "noise_resistance",
+      "description": "Queries about topics the user never discussed. Context must not fabricate data about those topics.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I work as a data scientist and I love Python."},
+            {"role": "assistant", "content": "Python is excellent for data science!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "query": "What is the user's favorite hiking trail?",
+          "expected_facts": [],
+          "forbidden_facts": ["trail", "hiking", "mountain"],
+          "notes": "No hiking data → context must not fabricate hiking facts. Known user facts (data scientist, Python) may appear."
+        },
+        {
+          "query": "Does the user have any siblings?",
+          "expected_facts": [],
+          "forbidden_facts": ["sibling", "brother", "sister"],
+          "notes": "No family data → context must not fabricate sibling info."
+        },
+        {
+          "query": "What is the user's credit card number?",
+          "expected_facts": [],
+          "forbidden_facts": ["credit", "card", "number", "4111"],
+          "notes": "Sensitive / never-discussed topic → absolutely must not appear."
+        }
+      ],
+      "cold_session_probe": {
+        "query": "Tell me about this user.",
+        "notes": "For a brand-new unknown user_id, context must be empty string."
+      }
+    },
+    {
+      "name": "cross_session_scoping",
+      "description": "Same user, two sessions: facts from both sessions should be accessible via /recall. Different user: zero bleed.",
+      "user_a_turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I live in Tokyo."},
+            {"role": "assistant", "content": "Tokyo is amazing!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-02T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I have a cat named Mochi."},
+            {"role": "assistant", "content": "Cute name!"}
+          ]
+        }
+      ],
+      "user_b_turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I work at Amazon."},
+            {"role": "assistant", "content": "Interesting!"}
+          ]
+        }
+      ],
+      "probes": [
+        {
+          "user": "A",
+          "query": "Where does this user live?",
+          "expected_facts": ["tokyo"],
+          "notes": "User A cross-session fact from s1"
+        },
+        {
+          "user": "A",
+          "query": "What is this user's pet's name?",
+          "expected_facts": ["mochi"],
+          "notes": "User A cross-session fact from s2"
+        },
+        {
+          "user": "A",
+          "query": "Amazon",
+          "expected_facts": [],
+          "forbidden_facts": ["amazon"],
+          "notes": "User A must not see user B's Amazon data (cross-user isolation)"
+        },
+        {
+          "user": "B",
+          "query": "Tokyo cat Mochi",
+          "expected_facts": [],
+          "forbidden_facts": ["tokyo", "mochi"],
+          "notes": "User B must not see user A's Tokyo/Mochi data (cross-user isolation)"
+        }
+      ]
+    },
+    {
+      "name": "delete_cleanup",
+      "description": "DELETE /sessions keeps cross-session facts. DELETE /users wipes all data.",
+      "turns": [
+        {
+          "session": "s1",
+          "timestamp": "2025-03-01T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I am a nurse and I live in Madrid."},
+            {"role": "assistant", "content": "Madrid is wonderful!"}
+          ]
+        },
+        {
+          "session": "s2",
+          "timestamp": "2025-03-02T10:00:00Z",
+          "messages": [
+            {"role": "user",      "content": "I love cooking Italian food."},
+            {"role": "assistant", "content": "Italian cuisine is delicious!"}
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "action": "DELETE /sessions/s2",
+          "assertion": "Memories from s1 (nurse, Madrid) survive. /memories count >= 1.",
+          "expected_recall_contains": ["italian", "cook"],
+          "notes": "Session s2 is deleted but its memories were extracted — by design memories are user-scoped and session_id is SET NULL, so they survive."
+        },
+        {
+          "action": "DELETE /users/{id}",
+          "assertion": "/users/{id}/memories returns empty array.",
+          "notes": "Full wipe."
+        }
+      ]
+    }
+  ]
+}

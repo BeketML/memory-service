@@ -47,3 +47,29 @@
 **Why:** Multi-hop queries ("what city does the user with the dog named Biscuit live in?") are expanded to ["dog's name", "current city"], running both retrievals and merging — so both `pet.name` and `location.city` appear in Tier 2. Opinions need nuance: a user saying "TS generics are annoying" doesn't invalidate that they generally like TypeScript — it's a stance update, not a factual contradiction.
 
 **Result:** Multi-hop probe hits both facts. Opinion arc is inspectable via supersession chain. Stance field allows recall to surface "currently mixed on TypeScript (was enthusiastic, now frustrated with generics)."
+
+---
+
+## v6 — Alembic migrations replace create_all; two bug fixes found in live testing
+
+**What changed:**
+
+1. **Alembic wired in.** Added `alembic.ini`, `migrations/env.py` (async asyncpg), `migrations/versions/0001_initial_schema.py`. Startup entrypoint (`docker-entrypoint.sh`) runs `alembic upgrade head` before uvicorn. The initial migration has an idempotency guard — if the `memories` table already exists (legacy `create_all` DB), it stamps the version without running DDL. Clean `pgdata` volumes get the full DDL. `Base.metadata.create_all` removed from `init_db()`.
+
+2. **Bug fix: `sessions.py` `on_conflict_do_update` column alias.** The `set_` dict used Python attribute name `"metadata_"` instead of DB column name `"metadata"`, and `ins.excluded.metadata_` raised `AttributeError`. Fixed to `"metadata": ins.excluded["metadata"]`.
+
+3. **Bug fix: supersession UniqueViolationError.** `reconcile.py` inserted the new `active=True` memory BEFORE deactivating the old one, which hit the partial unique index `uniq_active_scalar_fact`. Fixed by calling `deactivate_memory(session, old_id)` + `session.flush()` BEFORE `insert_memory`, then wiring `superseded_by` afterward. Added `deactivate_memory` and `set_superseded_by` helpers to `repos/memories.py`. Also wrapped each candidate in `session.begin_nested()` (SAVEPOINT) in `ingest.py` so one candidate failure never poisons the session for subsequent candidates.
+
+**Why:** The UniqueViolationError was silently swallowing entire turns in multi-fact conversations (all candidates after the first contradiction failure were lost due to the rolled-back session). The Alembic migration makes the schema story reproducible and inspectable via `alembic history`.
+
+**Result:** Live end-to-end test scores:
+- Contract compliance: 7/7 endpoints pass shape + status checks ✅
+- Fact evolution (Stripe→Notion, NYC→Berlin): supersession chains correct; `/memories` shows `active=false` + `superseded_by` on old, `active=true` + `supersedes` on new ✅
+- Recall quality (5 probes on evolution scenario): 7/9 — employer + city + multihop pass; pet name and TypeScript opinion missed when packed in a single dense turn (LLM extraction density limitation, documented below)
+- Cross-session scoping: 4/4 — cross-session facts visible, zero cross-user bleed ✅
+- Delete cleanup: 1/1 — session delete preserves user-scoped memories ✅
+- Malformed input: 400 on missing fields, wrong types, bad JSON; 201 on unicode/emoji/RTL ✅
+
+**Known limitation:** When a single turn contains many distinct facts (pet name, employer, city, opinion all at once), the LLM extraction may miss lower-priority facts due to output length constraints. Mitigation: use separate turns per topic in real usage. The extraction prompt now receives `known_state` (existing active memories) to guide key normalization and detect corrections, but dense turns remain a challenge.
+
+**Next:** Improve extraction prompt to split outputs across more tokens; add confidence-weighted fact prioritization in Tier-1 assembly so opinion arcs with `stance` field appear in recall context.

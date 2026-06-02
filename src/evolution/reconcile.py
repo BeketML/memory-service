@@ -8,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.extraction.parser import Candidate
 from src.storage.postgres.repos import memories as mem_repo
 
+# The partial unique index `uniq_active_scalar_fact` enforces at most one active
+# fact/preference per (user_id, key).  When superseding, we must deactivate the
+# old row and flush BEFORE inserting the new one, otherwise the INSERT races
+# against the still-active old row and hits a UniqueViolationError.
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +79,12 @@ async def reconcile_candidate(
         metadata["correction"] = True
 
     old_id = str(existing["id"])
+
+    # Step 1 — deactivate old row and flush so the unique-index slot is free.
+    await mem_repo.deactivate_memory(session, old_id)
+    await session.flush()
+
+    # Step 2 — insert new memory (now no active row with this key exists).
     new_id = await mem_repo.insert_memory(
         session,
         user_id=user_id,
@@ -88,7 +99,10 @@ async def reconcile_candidate(
         supersedes=old_id,
         metadata=metadata,
     )
-    await mem_repo.supersede_memory(session, old_id, new_id)
+
+    # Step 3 — wire the back-reference now that new_id is known.
+    await mem_repo.set_superseded_by(session, old_id, new_id)
+
     logger.info(
         "Superseded %s (key=%s, %r → %r)",
         old_id,

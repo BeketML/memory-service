@@ -1,0 +1,46 @@
+{
+  "_usage": "NOT for POST /turns directly. Use fixtures/post_turns/minimal/01_berlin_move.json then 02_notion_biscuit.json",
+  "description": "Минимальный smoke-сценарий (обёртка для e2e)",
+  "user_id": "test-user-minimal",
+  "turns": [
+    {
+      "session_id": "minimal-sess-1",
+      "user_id": "test-user-minimal",
+      "timestamp": "2026-06-02T10:00:00.000Z",
+      "metadata": {},
+      "messages": [
+        {
+          "role": "user",
+          "content": "I just moved to Berlin from NYC last month. Loving it so far."
+        },
+        {
+          "role": "assistant",
+          "content": "That sounds exciting! Berlin is a great city. How are you settling in?"
+        }
+      ]
+    },
+    {
+      "session_id": "minimal-sess-2",
+      "user_id": "test-user-minimal",
+      "timestamp": "2026-06-02T10:20:41.963Z",
+      "metadata": { "source": "smoke-test" },
+      "messages": [
+        {
+          "role": "user",
+          "content": "I work at Notion as a PM now. I have a dog named Biscuit."
+        },
+        {
+          "role": "assistant",
+          "content": "Notion is a exciting place! Biscuit must be a good coworker."
+        }
+      ]
+    }
+  ],
+  "recall_probe": {
+    "query": "Where does this user live?",
+    "session_id": "minimal-sess-2",
+    "user_id": "test-user-minimal",
+    "max_tokens": 512,
+    "expected_in_context": ["berlin"]
+  }
+}

@@ -30,9 +30,15 @@ list(LateInteractionTextEmbedding('colbert-ir/colbertv2.0').embed(['warmup'])); 
 print('Local embedding models ready.'); \
 "
 
-# Copy application source
+# Copy application source and Alembic migrations
 COPY src/ ./src/
+COPY migrations/ ./migrations/
+COPY alembic.ini .
+
+# Copy and wire up the entrypoint (runs migrations before uvicorn)
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 8080
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

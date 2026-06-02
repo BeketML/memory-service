@@ -1,0 +1,22 @@
+{
+  "description": "Шаблон одного POST /turns — скопируй и подставь свои значения",
+  "session_id": "your-session-id",
+  "user_id": "your-user-id",
+  "messages": [
+    {
+      "role": "user",
+      "content": "string — текст сообщения пользователя"
+    },
+    {
+      "role": "assistant",
+      "content": "string — ответ ассистента"
+    },
+    {
+      "role": "tool",
+      "name": "string — имя инструмента, только для role=tool",
+      "content": "string — результат вызова tool"
+    }
+  ],
+  "timestamp": "2026-06-02T10:20:41.963Z",
+  "metadata": {}
+}

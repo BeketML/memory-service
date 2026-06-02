@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.evolution.reconcile import reconcile_candidate
@@ -92,17 +92,21 @@ async def ingest_turn(
     if not candidates:
         return turn_id
 
-    # Reconcile + embed + upsert Qdrant per candidate
+    # Reconcile + embed + upsert Qdrant per candidate.
+    # Each candidate is wrapped in a SAVEPOINT so a failure on one candidate
+    # rolls back only that savepoint and the outer transaction continues.
     async with get_session() as session:
         for candidate in candidates:
             try:
-                new_mem_id, superseded_id = await reconcile_candidate(
-                    session,
-                    candidate,
-                    user_id=user_id,
-                    session_id=session_id,
-                    source_turn=turn_id,
-                )
+                async with session.begin_nested():   # SAVEPOINT
+                    new_mem_id, superseded_id = await reconcile_candidate(
+                        session,
+                        candidate,
+                        user_id=user_id,
+                        session_id=session_id,
+                        source_turn=turn_id,
+                    )
+
                 if new_mem_id is None:
                     continue  # same value restated — no new Qdrant point
 
@@ -118,6 +122,8 @@ async def ingest_turn(
                     "confidence": candidate.confidence,
                     "active": True,
                     "source_turn_id": turn_id,
+                    # ISO-8601 creation time so /search can return a real timestamp.
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
                 await upsert_memory(new_mem_id, emb, payload)
 
