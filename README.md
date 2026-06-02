@@ -76,7 +76,7 @@ curl http://localhost:8080/users/user-1/memories | jq .
        named Docker volume: pgdata                named Docker volume: qdata
 ```
 
-**Write path (`POST /turns`)** is fully synchronous: flatten messages → persist turn → load existing facts → LLM extraction → reconcile each candidate (insert/supersede) → BGE-M3 embed → upsert Qdrant → commit → return 201. Everything is committed before the response; there is no eventual consistency. A Qdrant upsert failure rolls back the Postgres transaction so the two stores never silently diverge.
+**Write path (`POST /turns`)** is fully synchronous: flatten messages → persist turn → load existing facts → LLM extraction → reconcile each candidate (insert/supersede) → BGE-M3 embed → upsert Qdrant → return 201. The Postgres commit happens before the Qdrant upsert; if Qdrant fails, the memory row exists in PG (Tier-1 recall still works immediately) but is absent from the Qdrant index until `/admin/reindex` heals it. `503` is returned on Qdrant failure so the caller can retry.
 
 **Read path (`POST /recall`, `POST /search`)** reads stable facts directly from Postgres (Tier 1 — always correct, no search needed) and ranks the long tail of query-relevant memories from Qdrant (Tier 2 — hybrid retrieval + ColBERT rerank) before assembling context within the `max_tokens` budget. Qdrant is never asked "what is the current fact?" — that question is always answered by Postgres.
 
@@ -311,7 +311,7 @@ Session-scoped data (turns, events) is filtered by `session_id` in Tier 3. User-
 | Unicode / emoji / RTL text | Stored verbatim (Postgres `TEXT` UTF-8); BGE-M3 handles Unicode gracefully; `201` |
 | Oversized payload | `raw_text` truncated to 16 000 chars before LLM extraction |
 | LLM extraction timeout / API error | Turn already persisted in PG (step 2); fallback `event` memory created; logged; no turn lost |
-| Qdrant upsert fails mid-`/turns` | Postgres transaction rolls back → `503`; PG and Qdrant stay consistent; `/admin/reindex` rebuilds |
+| Qdrant upsert fails mid-`/turns` | Memory committed in PG (Tier-1 recall works); missing from Qdrant index (Tier-2 misses it); `503` returned; `/admin/reindex` rebuilds Qdrant from PG |
 | Qdrant temporarily down | Tier 1 (PG facts) still serves `/recall`; Tier 2 degrades; `/admin/reindex` fixes after recovery |
 | Missing `OPENAI_API_KEY` | LLM extraction fails on every turn → fallback events stored; recall works but lacks structured facts |
 | Restart mid-write | Uncommitted PG transaction rolls back; committed turns + memories survive (named volumes) |
@@ -771,7 +771,7 @@ services/ingest.py
 
 **Error cases:**
 - Malformed request body → `400` (Pydantic `RequestValidationError` handler in `main.py`)
-- Qdrant upsert fails → PG transaction rolls back → `503`. Stores stay consistent.
+- Qdrant upsert fails → memory already in PG (Tier-1 recall correct); `503` returned; Tier-2 misses it until `/admin/reindex`
 - LLM API unreachable → fallback event stored; `201` returned (turn not lost)
 - PG unavailable → `503`
 
@@ -1039,7 +1039,7 @@ Returns all memories (active + superseded) for the user. Superseded memories hav
 ```
 
 ### `DELETE /sessions/{session_id}` → 204
-Deletes the session and its turns. User-scoped memories (facts/preferences/opinions) are retained — their `session_id` is set to NULL. Qdrant points sourced from this session are deleted.
+Deletes the session row and its turns (PG cascade). User-scoped memories (facts/preferences/opinions) are retained — their `session_id` is set to NULL. Qdrant points are NOT deleted: memories are user-scoped, so the points remain searchable via `user_id` filter and continue to serve `/recall` for the same user.
 
 ### `DELETE /users/{user_id}` → 204
 Full wipe: cascades to all sessions, turns, and memories for the user. Deletes all Qdrant points for the user.

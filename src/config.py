@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # LLM extraction
     llm_provider: str = "openai"       # openai | anthropic | ollama
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-4o"
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     ollama_host: str = "http://localhost:11434"

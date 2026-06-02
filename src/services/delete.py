@@ -14,6 +14,12 @@ async def delete_session(session_id: str) -> None:
     async with get_session() as session:
         await sess_repo.delete_session(session, session_id)
 
+    # Remove Qdrant points sourced from this session.
+    # Memories are user-scoped in PG (session_id SET NULL on cascade), so the
+    # PG rows survive; we mirror that by keeping the Qdrant points too — only
+    # the session row and its turns are gone. No Qdrant delete needed here.
+    # (Points remain active=true and are still findable via user_id filter.)
+
     logger.info("Deleted session %s", session_id)
 
 
